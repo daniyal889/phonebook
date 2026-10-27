@@ -295,6 +295,10 @@ async function deleteContact(id, name) {
   );
 
   async function start() {
+    if (!window.supabase || !window.supabase.createClient) {
+  status("کتابخانه Supabase بارگذاری نشده است. اتصال اینترنت یا دسترسی به CDN را بررسی کن.");
+  return;
+  }
     if (
       SUPABASE_URL === "آدرس پروژه خودت" ||
       SUPABASE_KEY === "کلید Publishable خودت"
