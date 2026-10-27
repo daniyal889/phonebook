@@ -129,39 +129,71 @@
     status("مخاطبان بارگذاری شدند.");
   }
 
-  function renderContacts() {
-    const term = document.getElementById("search").value
-      .trim().toLocaleLowerCase();
+  
+function renderContacts() {
+  const term = document.getElementById("search").value
+    .trim().toLocaleLowerCase();
 
-    contactsBox.replaceChildren();
+  contactsBox.replaceChildren();
 
-    const filtered = contacts.filter(c =>
-      c.name.toLocaleLowerCase().includes(term) ||
-      c.phone.toLocaleLowerCase().includes(term)
-    );
+  const filtered = contacts.filter(c =>
+    c.name.toLocaleLowerCase().includes(term) ||
+    c.phone.toLocaleLowerCase().includes(term)
+  );
 
-    if (!filtered.length) {
-      const empty = document.createElement("p");
-      empty.textContent = "مخاطبی پیدا نشد.";
-      contactsBox.append(empty);
-      return;
-    }
-
-    for (const contact of filtered) {
-      const item = document.createElement("div");
-      item.className = "contact";
-
-      const name = document.createElement("strong");
-      name.textContent = contact.name;
-
-      const phone = document.createElement("div");
-      phone.textContent = contact.phone;
-      phone.dir = "auto";
-
-      item.append(name, phone);
-      contactsBox.append(item);
-    }
+  if (!filtered.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "مخاطبی پیدا نشد.";
+    contactsBox.append(empty);
+    return;
   }
+
+  for (const contact of filtered) {
+    const item = document.createElement("div");
+    item.className = "contact";
+
+    const name = document.createElement("strong");
+    name.textContent = contact.name;
+
+    const phone = document.createElement("div");
+    phone.textContent = contact.phone;
+    phone.dir = "auto";
+
+    const deleteButton = document.createElement("button");
+    deleteButton.textContent = "🗑️ حذف مخاطب";
+    deleteButton.type = "button";
+    deleteButton.addEventListener("click", () => {
+      deleteContact(contact.id, contact.name);
+    });
+
+    item.append(name, phone, deleteButton);
+    contactsBox.append(item);
+  }
+}
+
+async function deleteContact(id, name) {
+  const confirmed = confirm(
+    `آیا مطمئنی مخاطب «${name}» حذف شود؟ این حذف برای هر دو حساب اعمال می‌شود.`
+  );
+
+  if (!confirmed) return;
+
+  status("در حال حذف مخاطب...");
+
+  const { error } = await client
+    .from("contacts")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    status("حذف انجام نشد: " + error.message);
+    return;
+  }
+
+  status("مخاطب حذف شد.");
+  await loadContacts();
+}
+
 
   async function refreshSession() {
     const { data, error } = await client.auth.getSession();
