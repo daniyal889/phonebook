@@ -1,0 +1,288 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>دفترچه تلفن مشترک</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: Tahoma, sans-serif;
+      max-width: 650px;
+      margin: 30px auto;
+      padding: 16px;
+      background: #f3f6fb;
+      color: #243047;
+    }
+    h1 { text-align: center; color: #2563eb; }
+    .panel {
+      background: white;
+      padding: 20px;
+      margin: 16px 0;
+      border-radius: 14px;
+      box-shadow: 0 3px 14px #0000000d;
+    }
+    input, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 12px;
+      margin: 7px 0;
+      border-radius: 8px;
+      font: inherit;
+    }
+    input { border: 1px solid #ccd3df; }
+    button {
+      background: #2563eb;
+      color: white;
+      border: 0;
+      cursor: pointer;
+    }
+    button.secondary { background: #64748b; }
+    .contact {
+      padding: 13px 0;
+      border-bottom: 1px solid #e5e7eb;
+      overflow-wrap: anywhere;
+    }
+    .muted { color: #64748b; font-size: 13px; }
+    #message { white-space: pre-wrap; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>📒 دفترچه تلفن مشترک</h1>
+  <p id="message" class="muted">در حال آماده‌سازی...</p>
+
+  <section id="loginPanel" class="panel" hidden>
+    <h3>ورود به دفترچه تلفن</h3>
+    <form id="loginForm">
+      <input id="email" type="email" placeholder="ایمیل حساب" required>
+      <input id="password" type="password" placeholder="رمز حساب" required>
+      <button type="submit">ورود</button>
+    </form>
+  </section>
+
+  <section id="appPanel" hidden>
+    <div class="panel">
+      <strong>افزودن مخاطب جدید</strong>
+      <form id="contactForm">
+        <input id="name" type="text" maxlength="120"
+          placeholder="نام و نام خانوادگی" required>
+        <input id="phone" type="tel" maxlength="40"
+          placeholder="شماره تلفن" required>
+        <button type="submit">ذخیره مخاطب</button>
+      </form>
+      <button id="logout" class="secondary" type="button">خروج از حساب</button>
+    </div>
+
+    <div class="panel">
+      <h3>مخاطبان مشترک</h3>
+      <input id="search" type="search" placeholder="جست‌وجوی نام یا شماره">
+      <div id="contacts"></div>
+    </div>
+  </section>
+
+<script>
+  // اطلاعات پروژه Supabase را اینجا وارد کن.
+  const SUPABASE_URL = "https://nthwyrcroiqxarwymphh.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_pHv7wZktmnV-b8xoghW5Zg_XSBkGflz";
+
+  const message = document.getElementById("message");
+  const loginPanel = document.getElementById("loginPanel");
+  const appPanel = document.getElementById("appPanel");
+  const contactsBox = document.getElementById("contacts");
+
+  let client;
+  let contacts = [];
+  let busy = false;
+
+  function status(text) {
+    message.textContent = text;
+  }
+
+  function showLogin() {
+    loginPanel.hidden = false;
+    appPanel.hidden = true;
+    contacts = [];
+    contactsBox.replaceChildren();
+  }
+
+  function showApp() {
+    loginPanel.hidden = true;
+    appPanel.hidden = false;
+  }
+
+  async function loadContacts() {
+    status("در حال دریافت مخاطبان...");
+    const { data, error } = await client
+      .from("contacts")
+      .select("id, name, phone, created_at")
+      .order("name", { ascending: true });
+
+    if (error) {
+      status("خطا در دریافت مخاطبان: " + error.message);
+      return;
+    }
+
+    contacts = data || [];
+    renderContacts();
+    status("مخاطبان بارگذاری شدند.");
+  }
+
+  function renderContacts() {
+    const term = document.getElementById("search").value
+      .trim().toLocaleLowerCase();
+
+    contactsBox.replaceChildren();
+
+    const filtered = contacts.filter(c =>
+      c.name.toLocaleLowerCase().includes(term) ||
+      c.phone.toLocaleLowerCase().includes(term)
+    );
+
+    if (!filtered.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "مخاطبی پیدا نشد.";
+      contactsBox.append(empty);
+      return;
+    }
+
+    for (const contact of filtered) {
+      const item = document.createElement("div");
+      item.className = "contact";
+
+      const name = document.createElement("strong");
+      name.textContent = contact.name;
+
+      const phone = document.createElement("div");
+      phone.textContent = contact.phone;
+      phone.dir = "auto";
+
+      item.append(name, phone);
+      contactsBox.append(item);
+    }
+  }
+
+  async function refreshSession() {
+    const { data, error } = await client.auth.getSession();
+
+    if (error) {
+      status("خطا در بررسی ورود: " + error.message);
+      return;
+    }
+
+    if (data.session) {
+      showApp();
+      await loadContacts();
+    } else {
+      showLogin();
+      status("برای ورود، ایمیل و رمز حساب را وارد کن.");
+    }
+  }
+
+  document.getElementById("loginForm").addEventListener(
+    "submit", async event => {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+      status("در حال ورود...");
+
+      try {
+        const { error } = await client.auth.signInWithPassword({
+          email: document.getElementById("email").value.trim(),
+          password: document.getElementById("password").value
+        });
+
+        if (error) status("ورود ناموفق بود: " + error.message);
+        else await refreshSession();
+      } finally {
+        busy = false;
+      }
+    }
+  );
+
+  document.getElementById("contactForm").addEventListener(
+    "submit", async event => {
+      event.preventDefault();
+      if (busy) return;
+      busy = true;
+
+      try {
+        const { data: { user }, error: userError } =
+          await client.auth.getUser();
+
+        if (userError || !user) {
+          status("ابتدا دوباره وارد حساب شو.");
+          return;
+        }
+
+        const name = document.getElementById("name").value.trim();
+        const phone = document.getElementById("phone").value.trim();
+
+        if (!name || !phone) {
+          status("نام و شماره تلفن را وارد کن.");
+          return;
+        }
+
+        status("در حال ذخیره مخاطب...");
+
+        const { error } = await client.from("contacts").insert({
+          name,
+          phone,
+          created_by: user.id
+        });
+
+        if (error) {
+          status("ذخیره انجام نشد: " + error.message);
+          return;
+        }
+
+        document.getElementById("contactForm").reset();
+        await loadContacts();
+        status("مخاطب با موفقیت ذخیره شد.");
+      } finally {
+        busy = false;
+      }
+    }
+  );
+
+  document.getElementById("search").addEventListener(
+    "input", renderContacts
+  );
+
+  document.getElementById("logout").addEventListener(
+    "click", async () => {
+      const { error } = await client.auth.signOut();
+      if (error) {
+        status("خطا در خروج: " + error.message);
+        return;
+      }
+      showLogin();
+      status("از حساب خارج شدی.");
+    }
+  );
+
+  async function start() {
+    if (
+      SUPABASE_URL === "آدرس پروژه خودت" ||
+      SUPABASE_KEY === "کلید Publishable خودت"
+    ) {
+      showLogin();
+      status("ابتدا آدرس پروژه و کلید Publishable را وارد کن.");
+      return;
+    }
+
+    try {
+      client = window.supabase.createClient(
+        SUPABASE_URL, SUPABASE_KEY
+      );
+      await refreshSession();
+    } catch (error) {
+      status("راه‌اندازی ناموفق بود: " + error.message);
+    }
+  }
+
+  start();
+</script>
+</body>
+</html>
